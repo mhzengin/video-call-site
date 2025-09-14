@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Görüşme</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+        }
+        
+        #localVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #333;
+        }
+        
+        #remoteVideo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 15px;
+            border: 3px solid #fff;
+            background: #333;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .call-setup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .setup-container {
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 90%;
+        }
+        
+        .setup-container h2 {
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+        
+        .call-type-selection {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .call-type-btn {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid transparent;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1.1em;
+        }
+        
+        .call-type-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .call-type-btn.selected {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: #ff6b6b;
+        }
+        
+        .start-call-btn {
+            background: linear-gradient(45deg, #ff6b6b, #ff8e8e);
+            color: white;
+            padding: 20px 40px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        
+        .start-call-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.4);
+        }
+        
+        .start-call-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .control-btn.mic-btn {
+            background: #4CAF50;
+        }
+        
+        .control-btn.mic-btn.muted {
+            background: #f44336;
+        }
+        
+        .control-btn.video-btn {
+            background: #2196F3;
+        }
+        
+        .control-btn.video-btn.disabled {
+            background: #f44336;
+        }
+        
+        .control-btn.end-btn {
+            background: #f44336;
+        }
+        
+        .control-btn:hover {
+            transform: scale(1.1);
+        }
+        
+        .status {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            backdrop-filter: blur(10px);
+        }
+        
+        .waiting-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .loading {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #333;
+            border-top: 5px solid #ff6b6b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        @media (max-width: 768px) {
+            #remoteVideo {
+                width: 120px;
+                height: 90px;
+                top: 10px;
+                right: 10px;
+            }
+            
+            .controls {
+                bottom: 20px;
+                padding: 15px;
+                gap: 15px;
+            }
+            
+            .control-btn {
+                width: 50px;
+                height: 50px;
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Arama Kurulumu -->
+    <div id="callSetup" class="call-setup">
+        <div class="setup-container">
+            <h2>Görüşme Türünü Seçin</h2>
+            
+            <div class="call-type-selection">
+                <div class="call-type-btn" data-type="video">
+                    <span>🎥</span>
+                    <div>
+                        <strong>Görüntülü Arama</strong><br>
+                        <small>Kamera + Mikrofon</small>
+                    </div>
+                </div>
+                
+                <div class="call-type-btn" data-type="audio">
+                    <span>📞</span>
+                    <div>
+                        <strong>Sesli Arama</strong><br>
+                        <small>Sadece Mikrofon</small>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="startCallBtn" class="start-call-btn" disabled>
+                Aramayı Başlat
+            </button>
+        </div>
+    </div>
+    
+    <!-- Video Konteyner -->
+    <div class="video-container">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline class="hidden"></video>
+    </div>
+    
+    <!-- Durum Göstergesi -->
+    <div id="status" class="status">
+        Bağlantı kuruluyor...
+    </div>
+    
+    <!-- Bekleme Göstergesi -->
+    <div id="waitingIndicator" class="waiting-indicator hidden">
+        <div class="loading"></div>
+        <h3>Karşı tarafın katılması bekleniyor...</h3>
+        <p>Lütfen bekleyin, size hemen dönüş yapacağız.</p>
+    </div>
+    
+    <!-- Kontroller -->
+    <div id="controls" class="controls hidden">
+        <button id="micBtn" class="control-btn mic-btn" title="Mikrofon">
+            🎤
+        </button>
+        <button id="videoBtn" class="control-btn video-btn" title="Kamera">
+            📹
+        </button>
+        <button id="endBtn" class="control-btn end-btn" title="Aramayı Bitir">
+            📞
+        </button>
+    </div>
+
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <script>
+        class VideoCall {
+            constructor() {
+                this.peer = null;
+                this.conn = null;
+                this.localStream = null;
+                this.remoteStream = null;
+                this.callType = 'video';
+                this.isAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
+                this.isConnected = false;
+                this.callStartTime = null;
+                
+                this.initElements();
+                this.initEventListeners();
+                this.initPeer();
+            }
+            
+            initElements() {
+                this.callSetup = document.getElementById('callSetup');
+                this.localVideo = document.getElementById('localVideo');
+                this.remoteVideo = document.getElementById('remoteVideo');
+                this.status = document.getElementById('status');
+                this.waitingIndicator = document.getElementById('waitingIndicator');
+                this.controls = document.getElementById('controls');
+                this.startCallBtn = document.getElementById('startCallBtn');
+                this.micBtn = document.getElementById('micBtn');
+                this.videoBtn = document.getElementById('videoBtn');
+                this.endBtn = document.getElementById('endBtn');
+            }
+            
+            initEventListeners() {
+                document.querySelectorAll('.call-type-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.call-type-btn').forEach(b => b.classList.remove('selected'));
+                        btn.classList.add('selected');
+                        this.callType = btn.dataset.type;
+                        this.startCallBtn.disabled = false;
+                    });
+                });
+                
+                this.startCallBtn.addEventListener('click', () => this.startCall());
+                this.micBtn.addEventListener('click', () => this.toggleMic());
+                this.videoBtn.addEventListener('click', () => this.toggleVideo());
+                this.endBtn.addEventListener('click', () => this.endCall());
+                
+                window.addEventListener('beforeunload', () => this.cleanup());
+            }
+            
+            async initPeer() {
+                try {
+                    this.peer = new Peer(this.isAdmin ? 'admin' : null, {
+                        host: 'peerjs-server.herokuapp.com',
+                        port: 443,
+                        secure: true
+                    });
+                    
+                    this.peer.on('open', (id) => {
+                        console.log('Peer ID:', id);
+                        this.updateStatus(this.isAdmin ? 'Çevrimiçi - Aramalar kabul ediliyor' : 'Bağlantı hazır');
+                        
+                        if (this.isAdmin) {
+                            this.sendTelegramNotification('🟢 Video Call Sistemi Açık');
+                        }
+                    });
+                    
+                    this.peer.on('call', (call) => {
+                        if (this.isAdmin) {
+                            this.handleIncomingCall(call);
+                        }
+                    });
+                    
+                    this.peer.on('connection', (conn) => {
+                        this.conn = conn;
+                        this.setupDataConnection();
+                    });
+                    
+                    this.peer.on('error', (error) => {
+                        console.error('Peer error:', error);
+                        this.updateStatus('Bağlantı hatası: ' + error.message);
+                    });
+                    
+                } catch (error) {
+                    console.error('Peer init error:', error);
+                    this.updateStatus('Peer servisi başlatılamadı');
+                }
+            }
+            
+            async startCall() {
+                try {
+                    this.callSetup.classList.add('hidden');
+                    this.updateStatus('Kamera ve mikrofon erişimi isteniyor...');
+                    
+                    const constraints = {
+                        video: this.callType === 'video' ? {
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 },
+                            facingMode: 'user'
+                        } : false,
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    };
+                    
+                    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    this.localVideo.srcObject = this.localStream;
+                    
+                    if (this.isAdmin) {
+                        this.updateStatus('Aramalar kabul ediliyor...');
+                        this.controls.classList.remove('hidden');
+                    } else {
+                        this.connectToAdmin();
+                    }
+                    
+                } catch (error) {
+                    console.error('Media access error:', error);
+                    this.updateStatus('Kamera/mikrofon erişimi reddedildi');
+                    this.callSetup.classList.remove('hidden');
+                }
+            }
+            
+            async connectToAdmin() {
+                try {
+                    this.updateStatus('Admin aranıyor...');
+                    this.sendTelegramNotification('🔔 GELEN VİDEO ARAMASI!');
+                    
+                    this.conn = this.peer.connect('admin');
+                    this.setupDataConnection();
+                    
+                    const call = this.peer.call('admin', this.localStream);
+                    this.setupCall(call);
+                    
+                    this.waitingIndicator.classList.remove('hidden');
+                    
+                } catch (error) {
+                    console.error('Connection error:', error);
+                    this.updateStatus('Admin ulaşılamıyor');
+                }
+            }
+            
+            handleIncomingCall(call) {
+                if (confirm('Gelen video aramasi var. Kabul edilsin mi?')) {
+                    this.sendTelegramNotification('✅ Arama Kabul Edildi');
+                    call.answer(this.localStream);
+                    this.setupCall(call);
+                } else {
+                    this.sendTelegramNotification('❌ Arama Reddedildi');
+                    call.close();
+                }
+            }
+            
+            setupCall(call) {
+                call.on('stream', (remoteStream) => {
+                    this.remoteStream = remoteStream;
+                    this.remoteVideo.srcObject = remoteStream;
+                    this.remoteVideo.classList.remove('hidden');
+                    this.waitingIndicator.classList.add('hidden');
+                    this.controls.classList.remove('hidden');
+                    this.isConnected = true;
+                    this.callStartTime = Date.now();
+                    this.updateStatus('Görüşme devam ediyor');
+                });
+                
+                call.on('close', () => {
+                    this.endCall();
+                });
+                
+                call.on('error', (error) => {
+                    console.error('Call error:', error);
+                    this.updateStatus('Arama hatası: ' + error.message);
+                });
+            }
+            
+            setupDataConnection() {
+                if (this.conn) {
+                    this.conn.on('data', (data) => {
+                        console.log('Received data:', data);
+                    });
+                }
+            }
+            
+            toggleMic() {
+                if (this.localStream) {
+                    const audioTrack = this.localStream.getAudioTracks()[0];
+                    if (audioTrack) {
+                        audioTrack.enabled = !audioTrack.enabled;
+                        this.micBtn.classList.toggle('muted', !audioTrack.enabled);
+                        this.micBtn.textContent = audioTrack.enabled ? '🎤' : '🔇';
+                    }
+                }
+            }
+            
+            toggleVideo() {
+                if (this.localStream) {
+                    const videoTrack = this.localStream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        videoTrack.enabled = !videoTrack.enabled;
+                        this.videoBtn.classList.toggle('disabled', !videoTrack.enabled);
+                        this.videoBtn.textContent = videoTrack.enabled ? '📹' : '📷';
+                    }
+                }
+            }
+            
+            endCall() {
+                const callDuration = this.callStartTime ? 
+                    Math.round((Date.now() - this.callStartTime) / 1000 / 60) : 0;
+                
+                if (this.isConnected && callDuration > 0) {
+                    this.sendTelegramNotification(`📞 Görüşme Sona Erdi - Süre: ${callDuration} dk`);
+                }
+                
+                this.cleanup();
+                
+                if (this.isAdmin) {
+                    this.sendTelegramNotification('🔴 Video Call Sistemi Kapalı');
+                }
+                
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1000);
+            }
+            
+            cleanup() {
+                if (this.localStream) {
+                    this.localStream.getTracks().forEach(track => track.stop());
+                }
+                
+                if (this.peer) {
+                    this.peer.destroy();
+                }
+                
+                if (this.conn) {
+                    this.conn.close();
+                }
+            }
+            
+            updateStatus(message) {
+                this.status.textContent = message;
+                console.log('Status:', message);
+            }
+            
+            async sendTelegramNotification(message) {
+                try {
+                    await fetch('/.netlify/functions/telegram-bot', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ message })
+                    });
+                } catch (error) {
+                    console.error('Telegram notification error:', error);
+                }
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            new VideoCall();
+        });
+    </script>
+</body>
+</html>
