@@ -354,7 +354,7 @@
             
        async initPeer() {
     try {
-        this.peer = new Peer(this.isAdmin ? 'admin' : null);
+              this.peer = new Peer(this.isAdmin ? 'admin' : null); 
                     
                     this.peer.on('open', (id) => {
                         console.log('Peer ID:', id);
