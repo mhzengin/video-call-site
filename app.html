@@ -596,10 +596,10 @@
                     this.updateConnectionStatus('Admin aranıyor...');
                     this.sendTelegramNotification('📱 GELEN MOBİL VİDEO ARAMASI!');
                     
-                    this.conn = this.peer.connect('admin-mobile');
+                    this.conn = this.peer.connect('admin');
                     this.setupDataConnection();
                     
-                    const call = this.peer.call('admin-mobile', this.localStream);
+                    const call = this.peer.call('admin', this.localStream);
                     this.setupCall(call);
                     
                     this.waitingScreen.classList.remove('hidden');
