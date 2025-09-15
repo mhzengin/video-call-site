@@ -512,7 +512,7 @@
             
             async initPeer() {
                 try {
-                    this.peer = new Peer(this.isAdmin ? 'admin-mobile' : null, {
+                    this.peer = new Peer(this.isAdmin ? 'admin' : null, {
                         host: '0.peerjs.com',
                         port: 443,
                         secure: true
