@@ -187,6 +187,7 @@
             border-radius: 25px;
             font-size: 1.1em;
             backdrop-filter: blur(10px);
+            z-index: 1001;
         }
         
         .waiting-indicator {
@@ -280,7 +281,7 @@
     
     <!-- Durum Göstergesi -->
     <div id="status" class="status">
-        Bağlantı kuruluyor...
+        Sistem başlatılıyor...
     </div>
     
     <!-- Bekleme Göstergesi -->
@@ -303,22 +304,22 @@
         </button>
     </div>
 
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script>
-        class VideoCall {
+        class SimpleVideoCall {
             constructor() {
-                this.peer = null;
-                this.conn = null;
                 this.localStream = null;
                 this.remoteStream = null;
+                this.peerConnection = null;
                 this.callType = 'video';
                 this.isAdmin = new URLSearchParams(window.location.search).get('admin') === 'true';
                 this.isConnected = false;
                 this.callStartTime = null;
+                this.sessionId = Math.random().toString(36).substr(2, 9);
+                this.pollingInterval = null;
                 
                 this.initElements();
                 this.initEventListeners();
-                this.initPeer();
+                this.initSystem();
             }
             
             initElements() {
@@ -352,38 +353,16 @@
                 window.addEventListener('beforeunload', () => this.cleanup());
             }
             
-       async initPeer() {
-    try {
-              this.peer = new Peer(this.isAdmin ? 'admin' : null); 
+            async initSystem() {
+                try {
+                    this.updateStatus('Sistem hazır');
                     
-                    this.peer.on('open', (id) => {
-                        console.log('Peer ID:', id);
-                        this.updateStatus(this.isAdmin ? 'Çevrimiçi - Aramalar kabul ediliyor' : 'Bağlantı hazır');
-                        
-                        if (this.isAdmin) {
-                            this.sendTelegramNotification('🟢 Video Call Sistemi Açık');
-                        }
-                    });
-                    
-                    this.peer.on('call', (call) => {
-                        if (this.isAdmin) {
-                            this.handleIncomingCall(call);
-                        }
-                    });
-                    
-                    this.peer.on('connection', (conn) => {
-                        this.conn = conn;
-                        this.setupDataConnection();
-                    });
-                    
-                    this.peer.on('error', (error) => {
-                        console.error('Peer error:', error);
-                        this.updateStatus('Bağlantı hatası: ' + error.message);
-                    });
-                    
+                    if (this.isAdmin) {
+                        this.sendTelegramNotification('🟢 Video Call Sistemi Açık');
+                    }
                 } catch (error) {
-                    console.error('Peer init error:', error);
-                    this.updateStatus('Peer servisi başlatılamadı');
+                    console.error('System init error:', error);
+                    this.updateStatus('Sistem başlatma hatası');
                 }
             }
             
@@ -411,74 +390,164 @@
                     if (this.isAdmin) {
                         this.updateStatus('Aramalar kabul ediliyor...');
                         this.controls.classList.remove('hidden');
+                        this.startPollingForCalls();
                     } else {
-                        this.connectToAdmin();
+                        this.updateStatus('Admin aranıyor...');
+                        await this.connectToAdmin();
                     }
                     
                 } catch (error) {
                     console.error('Media access error:', error);
                     this.updateStatus('Kamera/mikrofon erişimi reddedildi');
                     this.callSetup.classList.remove('hidden');
+                    alert('Kamera veya mikrofon erişimi gerekli. Lütfen tarayıcı izinlerini kontrol edin.');
                 }
             }
             
             async connectToAdmin() {
                 try {
-                    this.updateStatus('Admin aranıyor...');
-                    this.sendTelegramNotification('🔔 GELEN VİDEO ARAMASI!');
+                    await this.sendTelegramNotification('🔔 GELEN VİDEO ARAMASI!');
                     
-                    this.conn = this.peer.connect('admin');
-                    this.setupDataConnection();
-                    
-                    const call = this.peer.call('admin', this.localStream);
-                    this.setupCall(call);
+                    // WebRTC bağlantısı kur
+                    await this.setupWebRTC();
                     
                     this.waitingIndicator.classList.remove('hidden');
+                    this.updateStatus('Admin\'in katılması bekleniyor...');
+                    
+                    // Polling başlat
+                    this.startPollingForResponse();
                     
                 } catch (error) {
                     console.error('Connection error:', error);
-                    this.updateStatus('Admin ulaşılamıyor');
+                    this.updateStatus('Bağlantı hatası: ' + error.message);
                 }
             }
             
-            handleIncomingCall(call) {
-                if (confirm('Gelen video aramasi var. Kabul edilsin mi?')) {
-                    this.sendTelegramNotification('✅ Arama Kabul Edildi');
-                    call.answer(this.localStream);
-                    this.setupCall(call);
-                } else {
-                    this.sendTelegramNotification('❌ Arama Reddedildi');
-                    call.close();
-                }
-            }
-            
-            setupCall(call) {
-                call.on('stream', (remoteStream) => {
-                    this.remoteStream = remoteStream;
-                    this.remoteVideo.srcObject = remoteStream;
+            async setupWebRTC() {
+                this.peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
+                
+                // Local stream ekle
+                this.localStream.getTracks().forEach(track => {
+                    this.peerConnection.addTrack(track, this.localStream);
+                });
+                
+                // Remote stream dinle
+                this.peerConnection.ontrack = (event) => {
+                    this.remoteStream = event.streams[0];
+                    this.remoteVideo.srcObject = this.remoteStream;
                     this.remoteVideo.classList.remove('hidden');
                     this.waitingIndicator.classList.add('hidden');
                     this.controls.classList.remove('hidden');
                     this.isConnected = true;
                     this.callStartTime = Date.now();
                     this.updateStatus('Görüşme devam ediyor');
-                });
+                };
                 
-                call.on('close', () => {
-                    this.endCall();
-                });
-                
-                call.on('error', (error) => {
-                    console.error('Call error:', error);
-                    this.updateStatus('Arama hatası: ' + error.message);
-                });
+                // ICE candidate dinle
+                this.peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        // ICE candidate'ı sunucuya gönder
+                        this.sendSignal('ice-candidate', event.candidate);
+                    }
+                };
             }
             
-            setupDataConnection() {
-                if (this.conn) {
-                    this.conn.on('data', (data) => {
-                        console.log('Received data:', data);
+            startPollingForCalls() {
+                this.pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch('/.netlify/functions/signaling', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'check-calls',
+                                sessionId: this.sessionId
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        if (data.hasCall) {
+                            this.handleIncomingCall(data);
+                        }
+                    } catch (error) {
+                        console.error('Polling error:', error);
+                    }
+                }, 2000);
+            }
+            
+            startPollingForResponse() {
+                this.pollingInterval = setInterval(async () => {
+                    try {
+                        const response = await fetch('/.netlify/functions/signaling', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                action: 'check-response',
+                                sessionId: this.sessionId
+                            })
+                        });
+                        
+                        const data = await response.json();
+                        if (data.accepted) {
+                            await this.startWebRTCConnection();
+                        } else if (data.rejected) {
+                            this.updateStatus('Arama reddedildi');
+                            setTimeout(() => window.location.href = 'index.html', 2000);
+                        }
+                    } catch (error) {
+                        console.error('Polling error:', error);
+                    }
+                }, 1000);
+            }
+            
+            async handleIncomingCall(callData) {
+                if (confirm('Gelen video araması var. Kabul edilsin mi?')) {
+                    await this.sendTelegramNotification('✅ Arama Kabul Edildi');
+                    
+                    // WebRTC başlat
+                    await this.setupWebRTC();
+                    
+                    // Kabul et sinyali gönder
+                    await this.sendSignal('accept-call', { accepted: true });
+                    
+                } else {
+                    await this.sendTelegramNotification('❌ Arama Reddedildi');
+                    await this.sendSignal('reject-call', { rejected: true });
+                }
+            }
+            
+            async startWebRTCConnection() {
+                try {
+                    // Offer oluştur
+                    const offer = await this.peerConnection.createOffer();
+                    await this.peerConnection.setLocalDescription(offer);
+                    
+                    // Offer'ı gönder
+                    await this.sendSignal('offer', offer);
+                    
+                } catch (error) {
+                    console.error('WebRTC connection error:', error);
+                }
+            }
+            
+            async sendSignal(type, data) {
+                try {
+                    await fetch('/.netlify/functions/signaling', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'signal',
+                            type: type,
+                            data: data,
+                            sessionId: this.sessionId
+                        })
                     });
+                } catch (error) {
+                    console.error('Signal send error:', error);
                 }
             }
             
@@ -504,18 +573,18 @@
                 }
             }
             
-            endCall() {
+            async endCall() {
                 const callDuration = this.callStartTime ? 
                     Math.round((Date.now() - this.callStartTime) / 1000 / 60) : 0;
                 
                 if (this.isConnected && callDuration > 0) {
-                    this.sendTelegramNotification(`📞 Görüşme Sona Erdi - Süre: ${callDuration} dk`);
+                    await this.sendTelegramNotification(`📞 Görüşme Sona Erdi - Süre: ${callDuration} dk`);
                 }
                 
                 this.cleanup();
                 
                 if (this.isAdmin) {
-                    this.sendTelegramNotification('🔴 Video Call Sistemi Kapalı');
+                    await this.sendTelegramNotification('🔴 Video Call Sistemi Kapalı');
                 }
                 
                 setTimeout(() => {
@@ -524,16 +593,16 @@
             }
             
             cleanup() {
+                if (this.pollingInterval) {
+                    clearInterval(this.pollingInterval);
+                }
+                
                 if (this.localStream) {
                     this.localStream.getTracks().forEach(track => track.stop());
                 }
                 
-                if (this.peer) {
-                    this.peer.destroy();
-                }
-                
-                if (this.conn) {
-                    this.conn.close();
+                if (this.peerConnection) {
+                    this.peerConnection.close();
                 }
             }
             
@@ -558,7 +627,7 @@
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-            new VideoCall();
+            new SimpleVideoCall();
         });
     </script>
 </body>
